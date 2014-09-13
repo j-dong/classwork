@@ -1,8 +1,13 @@
 import java.util.*;
 import java.lang.ref.WeakReference;
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
+import java.io.IOException;
 
 public class AVL<T extends Comparable<T>> {
 	private class Node {
+        // public members are useful internally
+        // and won't be seen outside of AVL
 		public T data;
 		public Node left, right;
 		public int height;
@@ -14,6 +19,54 @@ public class AVL<T extends Comparable<T>> {
 			height = 1;
 			parent = new WeakReference<>(null);
 		}
+
+        // never actually used because I need to update height :P
+        private void rebalance() {
+            if (left == null) {
+                if (right == null) {
+                    return;
+                }
+                if (right.height > 1)
+                    rebalanceRightHeavy();
+            } else {
+                if (right == null) {
+                    if (left.height > 1)
+                        rebalanceLeftHeavy();
+                } else {
+                    if (left.height > right.height) {
+                        if (left.height - right.height > 1)
+                            rebalanceLeftHeavy();
+                    } else {
+                        if (right.height - left.height > 1)
+                            rebalanceRightHeavy();
+                    }
+                }
+            }
+        }
+
+        private void rebalanceLeftHeavy() {
+            if (left.left != null) {
+                if (left.right != null)
+                    if (left.right.height > left.left.height) // left subtree is right heavy
+                        left.leftRotate();
+            } else {
+                if (left.right != null)
+                    left.leftRotate();
+            }
+            rightRotate();
+        }
+
+        private void rebalanceRightHeavy() {
+            if (right.right != null) {
+                if (right.left != null)
+                    if (right.left.height > right.right.height) // right subtree is left heavy
+                        right.rightRotate();
+            } else {
+                if (right.left != null)
+                    right.rightRotate();
+            }
+            leftRotate();
+        }
 		
 		public void insert(T x) {
 			if (x.compareTo(data) <= 0) {
@@ -27,7 +80,7 @@ public class AVL<T extends Comparable<T>> {
 					if (right == null || left.height > right.height)
 						height = left.height + 1;
 					if ((right == null && left.height > 1) || left.height - right.height > 1) {
-						rightRotate();
+						rebalanceLeftHeavy();
 					}
 				}
 			} else {
@@ -41,15 +94,131 @@ public class AVL<T extends Comparable<T>> {
 					if (left == null || right.height > left.height)
 						height = right.height + 1;
 					if ((left == null && right.height > 1) || right.height - left.height > 1) {
-						leftRotate();
+						rebalanceRightHeavy();
 					}
 				}
 			}
 		}
+
+        // delete self
+        private void delete() {
+            replace(null);
+        }
+
+        // replace self
+        private void replace(Node x) {
+            if (parent.get() == null) {
+                head = x;
+            } else {
+                if (data.compareTo(parent.get().data) <= 0) {
+                    parent.get().left = x;
+                } else {
+                    parent.get().right = x;
+                }
+            }
+            if (x != null)
+                x.parent = new WeakReference<>(parent.get());
+        }
+        
+        // note that this is actually not recursive
+        // because a node may be swapped and the
+        // call stack invalidated
+        public void delete(T x) {
+            Node n = this; // node to delete or current node
+            boolean found = false;
+            while (true) {
+                if (n == null)
+                    throw new IndexOutOfBoundsException("no such node");
+                int c = x.compareTo(n.data);
+                if (c < 0 && !found) {
+                    n = n.left;
+                } else if (c > 0 && !found) {
+                    n = n.right;
+                } else {
+                    if (n.left == null) {
+                        if (n.right == null) {
+                            // case 1: no children
+                            Node t = n; // node to delete
+                            n = n.parent.get(); // rebalance parent
+                            // note: pointless to rebalance deleted node
+                            t.delete();
+                            break;
+                        } else {
+                            // case 2: one child
+                            Node t = n; // node to delete
+                            n = n.right;
+                            t.replace(t.right);
+                            n = n.parent.get(); // rebalance parent
+                            // note: pointless to rebalance right node
+                            // which is guaranteed to be an AVL tree
+                            break;
+                        }
+                    } else {
+                        if (n.right == null) {
+                            // case 2: one child
+                            Node t = n;
+                            n = n.left;
+                            t.replace(t.left);
+                            n = n.parent.get(); // rebalance parent
+                            // note: pointless to rebalance left node
+                            // which is guaranteed to be an AVL tree
+                            break;
+                        } else {
+                            System.out.println("2 children");
+                            // case 3: two children
+                            // find in-order successor
+                            // aka leftmost node in right subtree
+                            Node t = n;
+                            n = n.right;
+                            while (n.left != null)
+                                n = n.left;
+                            t.data = n.data;
+                            System.out.println(n.data);
+                            // no break; will delete with case 1 or 2
+                            found = true;
+                        }
+                    }
+                }
+            }
+            // TODO: rebalance and recalculate height
+            while (n != null) {
+                Node next = n.parent.get();
+                if (n.left == null) {
+                    if (n.right == null) {
+                        n.height = 1;
+                    } else {
+                        n.height = n.right.height + 1;
+                        if (n.right.height > 1)
+                            n.rebalanceRightHeavy();
+                    }
+                } else {
+                    if (n.right == null) {
+                        n.height = n.left.height + 1;
+                        if (n.left.height > 1)
+                            n.rebalanceLeftHeavy();
+                    } else {
+                        if (n.left.height > n.right.height) {
+                            n.height = n.left.height + 1;
+                            if (n.left.height - n.right.height > 1) {
+                                n.rebalanceLeftHeavy();
+                            }
+                        } else {
+                            n.height = n.right.height + 1;
+                            if (n.right.height - n.left.height > 1) {
+                                n.rebalanceRightHeavy();
+                            }
+                        }
+                    }
+                }
+                n = next;
+            }
+        }
 		
 		private void rightRotate() {
 			// rotate right
-			System.out.println("RIGHT ROTATE");
+			System.out.println("RIGHT ROTATE on " + data.toString());
+            for (StackTraceElement e : new Throwable().getStackTrace())
+                System.out.println(e);
 			if (parent.get() != null) {
 				if (data.compareTo(parent.get().data) <= 0) { // we're the left node
 					parent.get().left = left;
@@ -58,6 +227,7 @@ public class AVL<T extends Comparable<T>> {
 				}
 			} else {
 				head = left;
+                left.parent = new WeakReference<>(null);
 			}
 			left.parent = new WeakReference<>(parent.get());
 			parent = new WeakReference<>(left);
@@ -85,7 +255,9 @@ public class AVL<T extends Comparable<T>> {
 		
 		private void leftRotate() {
 			// rotate left
-			System.out.println("LEFT ROTATE");
+			System.out.println("LEFT ROTATE on " + data.toString());
+            for (StackTraceElement e : new Throwable().getStackTrace())
+                System.out.println(e);
 			if (parent.get() != null) {
 				if (data.compareTo(parent.get().data) <= 0) { // we're the left node
 					parent.get().left = right;
@@ -94,6 +266,7 @@ public class AVL<T extends Comparable<T>> {
 				}
 			} else {
 				head = right;
+                right.parent = new WeakReference<>(null);
 			}
 			right.parent = new WeakReference<>(parent.get());
 			parent = new WeakReference<>(right);
@@ -253,6 +426,14 @@ public class AVL<T extends Comparable<T>> {
 			head.insert(x);
 		}
 	}
+
+    public void delete(T x) {
+        if (head == null) {
+            throw new IndexOutOfBoundsException("no such node");
+        } else {
+            head.delete(x);
+        }
+    }
 	
 	public void print() {
 		head.print();
@@ -270,7 +451,7 @@ public class AVL<T extends Comparable<T>> {
 		head = null;
 	}
 	
-	public static void main(String argv[]) {
+	public static void test() {
 		AVL<Integer> a = new AVL<Integer>();
 		// decreasing
 		for (int i = 10; i > 0; i--) {
@@ -288,4 +469,35 @@ public class AVL<T extends Comparable<T>> {
 		System.out.println();
 		a.structure();
 	}
+
+    public static void main(String argv[]) {
+        AVL<Integer> a = new AVL<Integer>();
+        BufferedReader r = new BufferedReader(new InputStreamReader(System.in));
+        while (true) {
+            System.out.print("> ");
+            String line;
+            try {
+                line = r.readLine();
+            } catch (IOException e) {
+                // probably eof
+                break;
+            }
+            Scanner s = new Scanner(line);
+            String cmd = s.next();
+            if (cmd.equals("q"))
+                break;
+            if (cmd.equals("i"))
+                while (s.hasNextInt())
+                    a.insert(s.nextInt());
+            if (cmd.equals("d"))
+                while (s.hasNextInt())
+                    a.delete(s.nextInt());
+            if (cmd.equals("c"))
+                a.clear();
+            if (cmd.equals("p"))
+                a.print();
+            if (cmd.equals("s"))
+                a.structure();
+        }
+    }
 }
