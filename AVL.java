@@ -180,7 +180,6 @@ public class AVL<T extends Comparable<T>> {
                     }
                 }
             }
-            // TODO: rebalance and recalculate height
             while (n != null) {
                 Node next = n.parent.get();
                 if (n.left == null) {
